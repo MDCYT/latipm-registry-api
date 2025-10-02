@@ -4,7 +4,7 @@ import { getAuthUser } from "../../../utils/auth";
 
 export default function registerMeRoute(router: Router) {
     router.on("GET", "/v1/auth/me", async (req) => {
-        const user = getAuthUser(req);
+        const user = await getAuthUser(req);
         if (!user) {
             return json({ error: "no auth" }, { status: 401 });
         }

@@ -1,4 +1,4 @@
-// Bun registry server — REST API + SQLite
+// Bun registry server — REST API + MongoDB
 // Routes:
 //  POST   /v1/auth/signup   {email,password}
 //  POST   /v1/auth/login    {email,password}
