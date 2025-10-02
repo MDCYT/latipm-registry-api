@@ -1,5 +1,5 @@
 import { PutObjectCommand } from "@aws-sdk/client-s3";
-import db from "../../../db";
+import { ObjectId, packagesCollection, versionsCollection } from "../../../db";
 import { Router } from "../../../router";
 import { s3 } from "../../../services/r2";
 import { R2_BUCKET, R2_ENDPOINT, R2_PUBLIC_URL } from "../../../config";
@@ -8,13 +8,20 @@ import { getAuthUser } from "../../../utils/auth";
 
 export default function registerPublishRoute(router: Router) {
     router.on("POST", "/v1/packages/:name/:version", async (req, params) => {
-        const user = getAuthUser(req);
+        const user = await getAuthUser(req);
         if (!user) {
             return json({ error: "no auth" }, { status: 401 });
         }
         const { name, version } = params;
+        if (!name || !version) {
+            return json({ error: "nombre y versión requeridos" }, { status: 400 });
+        }
         const form = await req.formData();
-        const meta = JSON.parse(String(form.get("meta")) || "{}");
+        const parsedMeta = JSON.parse(String(form.get("meta")) || "{}");
+        const meta = (typeof parsedMeta === "object" && parsedMeta !== null ? parsedMeta : {}) as Record<
+            string,
+            unknown
+        >;
         const file = form.get("file") as unknown as File;
         const sha256 = String(form.get("sha256"));
         if (!file) {
@@ -25,16 +32,25 @@ export default function registerPublishRoute(router: Router) {
         if (real !== sha256) {
             return json({ error: "sha256 inválido" }, { status: 400 });
         }
-        const pkg = db.query("SELECT id,owner_id FROM packages WHERE name=?").get(name!) as
-            | { id: number; owner_id: number }
-            | undefined;
+        let pkg = await packagesCollection.findOne({ name });
         if (!pkg) {
-            db.query("INSERT INTO packages(name, owner_id) VALUES (?,?)").run(name, user.id);
-        } else if (pkg.owner_id !== user.id) {
+            const ownerId = new ObjectId(user.id);
+            const now = new Date();
+            const insert = await packagesCollection.insertOne({
+                name,
+                ownerId,
+                createdAt: now,
+            });
+            pkg = {
+                _id: insert.insertedId,
+                name,
+                ownerId,
+                createdAt: now,
+            };
+        } else if (pkg.ownerId.toString() !== user.id) {
             return json({ error: "no eres owner" }, { status: 403 });
         }
-        const pkgRow = db.query("SELECT id FROM packages WHERE name=?").get(name!) as { id: number };
-        const exists = db.query("SELECT id FROM versions WHERE package_id=? AND version=?").get(pkgRow.id, version);
+        const exists = await versionsCollection.findOne({ packageId: pkg._id, version });
         if (exists) {
             return json({ error: "versión ya publicada" }, { status: 409 });
         }
@@ -49,9 +65,14 @@ export default function registerPublishRoute(router: Router) {
             ContentType: "application/zip",
         }));
         const tarball = `${R2_PUBLIC_URL.replace(/\/$/, "")}/${r2Key}`;
-        db.query(
-            "INSERT INTO versions(package_id, version, tarball_url, shasum, manifest_json) VALUES (?,?,?,?,?)"
-        ).run(pkgRow.id, version, tarball, sha256, JSON.stringify(meta));
+        await versionsCollection.insertOne({
+            packageId: pkg._id,
+            version,
+            tarballUrl: tarball,
+            shasum: sha256,
+            manifest: meta,
+            createdAt: new Date(),
+        });
         return json({ ok: true, name, version, tarball });
     });
 }

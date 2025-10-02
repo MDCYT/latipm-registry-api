@@ -1,22 +1,26 @@
-import db from "../../../db";
+import { packagesCollection, versionsCollection } from "../../../db";
 import { Router } from "../../../router";
 import { json } from "../../../utils/json";
 
 export default function registerPackageVersionsRoute(router: Router) {
     router.on("GET", "/v1/packages/:name", async (_req, params) => {
         const { name } = params;
-        const pkg = db.query("SELECT id FROM packages WHERE name=?").get(name) as { id: number } | undefined;
+        if (!name) {
+            return json({ name, versions: [] });
+        }
+        const pkg = await packagesCollection.findOne({ name }, { projection: { _id: 1 } });
         if (!pkg) {
             return json({ name, versions: [] });
         }
-        const rows = db
-            .query("SELECT version, tarball_url as tarball, shasum FROM versions WHERE package_id=? ORDER BY created_at DESC")
-            .all(pkg.id) as { version: string; tarball: string; shasum: string }[];
+        const rows = await versionsCollection
+            .find({ packageId: pkg._id }, { projection: { version: 1, tarballUrl: 1, shasum: 1 } })
+            .sort({ createdAt: -1 })
+            .toArray();
         return json({
             name,
             versions: rows.map((row) => ({
                 version: row.version,
-                dist: { tarball: row.tarball, shasum: row.shasum },
+                dist: { tarball: row.tarballUrl, shasum: row.shasum },
             })),
         });
     });

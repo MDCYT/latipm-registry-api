@@ -1,4 +1,4 @@
-import db from "../../../db";
+import { usersCollection } from "../../../db";
 import { Router } from "../../../router";
 import { json } from "../../../utils/json";
 import { hashPassword } from "../../../utils/password";
@@ -10,14 +10,14 @@ export default function registerSignupRoute(router: Router) {
         if (!email || !password) {
             return json({ error: "email y password requeridos" }, { status: 400 });
         }
-        const existing = db.query("SELECT id FROM users WHERE email=?").get(email);
+        const existing = await usersCollection.findOne({ email });
         if (existing) {
             return json({ error: "email ya registrado" }, { status: 409 });
         }
         const hash = await hashPassword(password);
-        db.query("INSERT INTO users(email, password_hash) VALUES (?,?)").run(email, hash);
-        const user = db.query("SELECT id FROM users WHERE email=?").get(email) as { id: number };
-        const token = signToken({ uid: user.id, email });
+        const now = new Date();
+        const result = await usersCollection.insertOne({ email, passwordHash: hash, createdAt: now });
+        const token = signToken({ uid: result.insertedId.toString(), email });
         return json({ token });
     });
 }

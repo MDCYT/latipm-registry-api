@@ -1,4 +1,4 @@
-import db from "../../../db";
+import { packagesCollection, versionsCollection } from "../../../db";
 import { Router } from "../../../router";
 
 export default function registerDownloadRoute(router: Router) {
@@ -7,17 +7,17 @@ export default function registerDownloadRoute(router: Router) {
         if (!name || !version) {
             return new Response("invalid download link", { status: 400 });
         }
-        const row = db
-            .query(
-                `SELECT v.tarball_url
-                 FROM versions v
-                 JOIN packages p ON p.id = v.package_id
-                 WHERE p.name = ? AND v.version = ?`
-            )
-            .get(name, version) as { tarball_url: string } | undefined;
+        const pkg = await packagesCollection.findOne({ name }, { projection: { _id: 1 } });
+        if (!pkg) {
+            return new Response("not found", { status: 404 });
+        }
+        const row = await versionsCollection.findOne(
+            { packageId: pkg._id, version },
+            { projection: { tarballUrl: 1 } }
+        );
         if (!row) {
             return new Response("not found", { status: 404 });
         }
-        return Response.redirect(row.tarball_url, 302);
+        return Response.redirect(row.tarballUrl, 302);
     });
 }
