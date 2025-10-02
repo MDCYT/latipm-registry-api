@@ -16,7 +16,6 @@ import { join } from "node:path";
 import { createHmac } from "crypto";
 
 const db = new Database("registry.db"); 
-const STORAGE = process.env.STORAGE_DIR || "storage";
 const JWT_SECRET: string = process.env.JWT_SECRET || "dev-secret";
  
 const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID!;
@@ -37,7 +36,6 @@ const s3 = new S3Client({
 // --- schema bootstrap ---
 const schema = await Bun.file(join(import.meta.dir, "schema.sql")).text();
 db.exec(schema);
-mkdirSync(STORAGE, { recursive: true });
 
 // --- helpers ---
 function json(data: any, init: ResponseInit = {}) {
