@@ -1,0 +1,12 @@
+node_modules
+.env
+registry.db
+registry.db-shm
+registry.db-wal
+# Ignore .env
+# Local env files for development
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env
